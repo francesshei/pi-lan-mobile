@@ -1,0 +1,35 @@
+{
+  "name": "pi-lan-mobile",
+  "version": "0.1.0",
+  "description": "QR-paired LAN mobile remote for a running pi session. DSH Desktop bridge-style curated chat remote as a pi extension.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "lan",
+    "mobile",
+    "qr"
+  ],
+  "pi": {
+    "extensions": [
+      "extensions/pi-lan-mobile.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.87.1",
+    "@types/node": "^26.6.2",
+    "@types/qrcode": "^1.5.6",
+    "typescript": "^7.0.2"
+  }
+}
