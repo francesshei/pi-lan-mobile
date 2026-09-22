@@ -126,6 +126,25 @@ export function tapPiEvents(pi: ExtensionAPI, log: TranscriptLog): void {
 			.join("\n");
 	};
 
+	const thinkingText = (message: TapMessage): string => {
+		const blocks = Array.isArray(message.content) ? message.content : [];
+		return blocks
+			.filter((block) => block?.type === "thinking")
+			.map((block) => block.thinking ?? "")
+			.join("\n");
+	};
+
+	// Snapshot pair for the current assistant message; update and end share
+	// this so the final push can never lag a throttled stream update.
+	const assistantItems = (message: TapMessage): TranscriptItem[] => {
+		const items: TranscriptItem[] = [];
+		const thinking = truncate(thinkingText(message), MAX_TEXT);
+		if (thinking) items.push({ key: `${currentAssistantKey}:thinking`, kind: "thinking", text: thinking });
+		const text = truncate(blockText(message), MAX_TEXT);
+		if (text) items.push({ key: `${currentAssistantKey}:text`, kind: "text", text });
+		return items;
+	};
+
 	pi.on("message_start", async (event) => {
 		const message = event.message as TapMessage;
 		if (message.role === "user") {
@@ -148,14 +167,7 @@ export function tapPiEvents(pi: ExtensionAPI, log: TranscriptLog): void {
 		if (lastAssistantUpdateAt && now - lastAssistantUpdateAt < UPDATE_THROTTLE_MS) return;
 		lastAssistantUpdateAt = now;
 
-		const blocks = Array.isArray(message.content) ? message.content : [];
-		const text = truncate(blockText(message), MAX_TEXT);
-		const thinking = truncate(
-			blocks.filter((block) => block?.type === "thinking").map((block) => block.thinking ?? "").join("\n"),
-			MAX_TEXT,
-		);
-		if (thinking) log.push({ key: `${currentAssistantKey}:thinking`, kind: "thinking", text: thinking });
-		if (text) log.push({ key: `${currentAssistantKey}:text`, kind: "text", text });
+		for (const item of assistantItems(message)) log.push(item);
 	});
 
 	pi.on("message_end", async (event) => {
@@ -165,8 +177,10 @@ export function tapPiEvents(pi: ExtensionAPI, log: TranscriptLog): void {
 			return;
 		}
 		if (message.role === "assistant" && currentAssistantKey) {
-			const text = truncate(blockText(message), MAX_TEXT);
-			if (text) log.push({ key: `${currentAssistantKey}:text`, kind: "text", text });
+			// message_update is throttled; this unthrottled final snapshot is
+			// what guarantees the phone sees the COMPLETE thinking block, not
+			// whatever the last poll happened to catch.
+			for (const item of assistantItems(message)) log.push(item);
 			currentAssistantKey = undefined;
 		}
 	});

@@ -8,8 +8,9 @@ routes removed by design: the operator at the pi TUI is the approval surface.
 
 - **Erasable TypeScript only** (no enums, no parameter properties, no namespaces):
   tests run under plain `node --test` with native type stripping. The pure
-  contract tests (`test/bridge.test.ts`, `test/stream.test.ts`) must run with
-  **zero node_modules** (pi packages are type-only imports; nothing under
+  contract tests (`test/bridge.test.ts`, `test/stream.test.ts`, `test/tap.test.ts`,
+  `test/pages.test.ts`)
+  must run with **zero node_modules** (pi packages are type-only imports; nothing under
   `src/` may import `qrcode`). `test/entry.test.ts` is the one suite that needs
   `npm install` (it exercises the entry, which renders QRs).
 - **The security checklist (SR-1…SR-12) is the contract.** Any change to
@@ -41,13 +42,16 @@ routes removed by design: the operator at the pi TUI is the approval surface.
 - `src/rpc.ts` — the six-verb allowlist adapter onto pi APIs.
 - `src/pages.ts` — phone pages (string templates; page JS must stay backtick-free
   and use textContent, never innerHTML for dynamic content).
-- `test/*.test.ts` — contract tests (bridge + log).
+- `test/*.test.ts` — contract tests (bridge + log + pages).
 
 ## Commands
 
 - `npm test` — run all suites (needs `npm install` for the entry suite; pure
-  contract suites can run with `node --test test/bridge.test.ts test/stream.test.ts`
-  on a bare checkout).
+  contract suites can run with `node --test test/bridge.test.ts test/stream.test.ts
+  test/pages.test.ts` on a bare checkout).
+- `npm run preview` — dev-only static server for the phone pages on the LAN
+  (`scripts/preview-page.ts`); iterate on keyboard/viewport behavior without
+  pairing or pi restarts. Serve HTML only — kill it when done, it has no auth.
 - Manual check: load pi in this dir (`pi -e extensions/pi-lan-mobile.ts` or via
   `pi install`), run `/mobile`, scan/visit the printed URL from a LAN device.
 

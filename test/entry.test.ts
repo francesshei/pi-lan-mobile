@@ -96,3 +96,36 @@ test("session.create dispatches the sanctioned /mobile create command", async ()
 	assert.equal(sent.at(-1)?.text, "/mobile create");
 	assert.deepEqual(sent.at(-1)?.options, { expandPromptTemplates: true, deliverAs: "steer" });
 });
+
+test("pairing widget is a component factory that survives pi's 10-line string cap", async () => {
+	const { pi, commands } = makeFakePi();
+	entry(pi);
+	const widgets: Array<{ key: string; content: unknown }> = [];
+	const ctx = {
+		...makeFakeCtx(),
+		ui: {
+			...makeFakeCtx().ui,
+			setWidget: (key: string, content: unknown) => {
+				widgets.push({ key, content });
+			},
+		},
+	};
+	await commands.get("mobile")!.handler("", ctx as any);
+	const set = widgets.find((w) => w.key === "pi-lan-mobile" && typeof w.content === "function");
+	assert.ok(set, "/mobile must set a component widget (not a string array)");
+	const factory = set!.content as (tui: unknown, theme: unknown) => { render(w: number): string[]; invalidate(): void };
+	const component = factory(undefined, undefined);
+
+	const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+	const full = component.render(80);
+	assert.ok(full.length > 11, `full QR height exceeds the 10-line string cap (got ${full.length} lines)`);
+	assert.ok(full.some((l) => l.includes("\u2584") || l.includes("\u2580")), "QR block characters render");
+	assert.ok(full.at(-1)?.includes("http"), "pairing URL is the last line");
+	assert.ok(full.every((l) => stripAnsi(l).length <= 80), "no line overflows the width");
+
+	// Narrow pane: ANSI-aware fit, escape sequences never spill as garbage.
+	const narrow = component.render(30);
+	assert.ok(narrow.every((l) => stripAnsi(l).length <= 30), "narrow width respected");
+	component.invalidate(); // must exist and not throw (theme-change contract)
+	await (await import("../src/bridge.ts")).getBridge().stop();
+});

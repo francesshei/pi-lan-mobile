@@ -30,6 +30,19 @@ test("since(after) returns ordered updates after cursor", () => {
 	assert.equal(r.cursor, 3);
 });
 
+test("transport shape: updates are {cursor,item} wrappers; reset carries raw items", () => {
+	// The page reconciler applies updates by item.key. Handing it the wrapper
+	// (or reset a wrapper list) makes messages silently vanish — v1 bug.
+	const log = new TranscriptLog();
+	log.push({ key: "a", kind: "user", text: "hi" });
+	const r = log.since(0);
+	assert.deepEqual(Object.keys(r.updates?.[0] ?? {}).sort(), ["cursor", "item"]);
+	assert.equal(r.updates?.[0]?.item.text, "hi");
+	const s = log.since(-1);
+	assert.equal(s.reset, true);
+	assert.equal(s.items?.[0]?.text, "hi", "reset items are raw TranscriptItems, not wrappers");
+});
+
 test("stale cursor triggers full reset", () => {
 	const log = new TranscriptLog();
 	for (let i = 0; i < 5; i++) log.push({ key: `k${i}`, kind: "info", text: String(i) });

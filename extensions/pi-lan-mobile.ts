@@ -11,6 +11,10 @@
 // on session_start.
 
 import QRCode from "qrcode";
+// Injected as a virtual module by pi at runtime (same bundled copy pi uses
+// internally); declared a devDependency only so test/entry.test.ts can run
+// the entry under bare `node --test`.
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getBridge } from "../src/bridge.ts";
 import { TranscriptLog, tapPiEvents } from "../src/stream.ts";
@@ -22,11 +26,41 @@ const shared = globalThis as typeof globalThis & {
 	__piLanMobileLog?: TranscriptLog;
 	__piLanMobileTapped?: boolean;
 	__piLanMobileApprovalDraining?: boolean;
+	__piLanMobileQr?: { url: string; qr: string };
 };
 
 function getLog(): TranscriptLog {
 	shared.__piLanMobileLog ??= new TranscriptLog();
 	return shared.__piLanMobileLog as TranscriptLog;
+}
+
+// The pairing QR must NOT go through the string-array widget form: pi hard-
+// caps string arrays at InteractiveMode.MAX_WIDGET_LINES (10) and appends
+// "... (widget truncated)", amputating the ~17-line half-block QR. The
+// component-factory form is the sanctioned bypass: content holds no theme-
+// baked styling (qrcode's own SGR is stable), so rendering is stateless and
+// invalidate() is a genuine no-op. Lines are ANSI-fit to width, mirroring the
+// paddingX=1 inset the string path had.
+// The widget live-reads bridge state on every render: full QR while a pairing
+// link is live, ONE collapsed line once a phone is connected (a 17-line QR
+// loitering above the editor after pairing succeeded is pure noise). Callers
+// re-setWidget at known transition points (approval, session_start, /mobile)
+// to force the immediate redraw; any other TUI repaint also picks it up.
+function pairingWidget(qr: string, url: string): { invalidate(): void; render(width: number): string[] } {
+	const bridge = getBridge();
+	return {
+		invalidate(): void {},
+		render(width: number): string[] {
+			if (width < 4) return [""]; // nothing renderable at this width
+			const snap = bridge.snapshot();
+			if (snap.connected) {
+				return [` ${truncateToWidth(`📱 phone connected on :${snap.port} — /mobile shows the QR again`, width - 2, "")} `];
+			}
+			const lines = ["📱 pair your phone (same network):", ...qr.split("\n"), url];
+			// "" ellipsis: clip like the terminal edge did, never splice "…" into QR modules.
+			return lines.map((line) => ` ${truncateToWidth(line, width - 2, "")} `);
+		},
+	};
 }
 
 export default function (pi: ExtensionAPI): void {
@@ -64,13 +98,56 @@ export default function (pi: ExtensionAPI): void {
 					approved = false;
 				}
 				bridge.decide(id, approved);
-				if (approved) ctx.ui.notify("Phone paired", "info");
-				else ctx.ui.notify("Phone pairing denied", "warning");
+				if (approved) {
+					ctx.ui.notify("Phone paired", "info");
+					void watchConnected(ctx);
+				} else ctx.ui.notify("Phone pairing denied", "warning");
 				refreshStatus();
 			}
 		} finally {
 			shared.__piLanMobileApprovalDraining = false;
 		}
+	}
+
+	// --- pairing widget surface: QR generation is cached per pairing URL so
+	// redraws (collapse/expand) never re-run qrcode work mid-render.
+
+	async function showSurface(ctx: ExtensionContext): Promise<void> {
+		const snap = bridge.snapshot();
+		if (!snap.running || !snap.pairingUrl) return;
+		const url = snap.pairingUrl;
+		if (!shared.__piLanMobileQr || shared.__piLanMobileQr.url !== url) {
+			// QR in the TUI: half-block terminal rendering (~35 cols for a v4–5 QR),
+			// as a component widget so the full height survives (see pairingWidget).
+			shared.__piLanMobileQr = { url, qr: await QRCode.toString(url, { type: "terminal", small: true }) };
+		}
+		redrawSurface(ctx);
+	}
+
+	function redrawSurface(ctx: ExtensionContext): void {
+		const cached = shared.__piLanMobileQr;
+		if (!cached) return;
+		// A fresh factory call forces renderWidgets + requestRender, so the widget
+		// visibly changes the moment the state transition lands.
+		ctx.ui.setWidget(UI_KEY, () => pairingWidget(cached.qr, cached.url));
+	}
+
+	// The phone's /pair/status poll is what actually creates the session, and it
+	// lands slightly AFTER the approval decision. Watch briefly, then redraw so
+	// the QR collapses as soon as the phone is really connected.
+	function watchConnected(ctx: ExtensionContext): void {
+		let ticks = 0;
+		const timer = setInterval(() => {
+			const snap = bridge.snapshot();
+			if (ctx !== currentCtx || ++ticks > 15 || !snap.running) {
+				clearInterval(timer); // stale rebind or bridge gone: drop, the new instance owns the surface
+				return;
+			}
+			if (snap.connected) {
+				clearInterval(timer);
+				redrawSurface(ctx);
+			}
+		}, 400);
 	}
 
 	function refreshStatus(): void {
@@ -104,11 +181,7 @@ export default function (pi: ExtensionAPI): void {
 		currentCtx = ctx;
 		refreshStatus();
 		void drainApprovals();
-		const snap = bridge.snapshot();
-		if (snap.running && snap.pairingUrl) {
-			const qr = await QRCode.toString(snap.pairingUrl, { type: "terminal", small: true });
-			ctx.ui.setWidget(UI_KEY, ["📱 pair your phone (same network):", ...qr.split("\n"), snap.pairingUrl]);
-		}
+		await showSurface(ctx);
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
@@ -173,9 +246,7 @@ export default function (pi: ExtensionAPI): void {
 				return;
 			}
 
-			// QR in the TUI: half-block terminal rendering (~41 cols for a v4–5 QR).
-			const qr = await QRCode.toString(snap.pairingUrl, { type: "terminal", small: true });
-			ctx.ui.setWidget(UI_KEY, ["📱 pair your phone (same network):", ...qr.split("\n"), snap.pairingUrl]);
+			await showSurface(ctx);
 			ctx.ui.setStatus(UI_KEY, "📱 mobile listening");
 			ctx.ui.notify(
 				`Mobile listening on :${snap.port} — QR above, link valid ~5 min. Approvals appear here.`,
