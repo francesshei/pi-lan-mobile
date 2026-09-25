@@ -202,6 +202,9 @@ test("security headers on every response (SR-6)", async () => {
 	assert.equal(res.headers.get("referrer-policy"), "no-referrer");
 	assert.equal(res.headers.get("cache-control"), "no-store");
 	assert.match(res.headers.get("content-security-policy") ?? "", /default-src 'self'/);
+	// font-src data: is the only font source (embedded OFL subset, pages.ts);
+	// anything beyond data: here would be a spec change, not an implementation detail.
+	assert.match(res.headers.get("content-security-policy") ?? "", /font-src data:/);
 	await bridge.stop();
 });
 

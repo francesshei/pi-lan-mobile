@@ -21,18 +21,34 @@
 //      node would reset the <pre> scroll to 0 and fight the reader mid-box),
 //      and their open state restores from openKeys.
 
+import { FONT_DATA_URI, FONT_FAMILY } from "./font-embedded.ts";
+import { BODY_FONT_DATA_URI, BODY_FONT_FAMILY } from "./font-embedded-body.ts";
+
+// Inline @font-face for the embedded subset. The only src is the data: URI
+// this string carries (CSP: font-src data:).
+const FONT_FACE =
+	"@font-face{font-family:'" + FONT_FAMILY + "';font-style:normal;font-weight:400;src:url(" + FONT_DATA_URI + ") format('woff2')}";
+
+// Same pattern for the body face (Departure Mono, see font-embedded-body.ts).
+const BODY_FONT_FACE =
+	"@font-face{font-family:'" + BODY_FONT_FAMILY + "';font-style:normal;font-weight:400;src:url(" + BODY_FONT_DATA_URI + ") format('woff2')}";
+
 const PAGE_BASE_STYLE = [
+	FONT_FACE,
+	BODY_FONT_FACE,
 	":root{",
-	"--bg:#0d1117;--panel:#161b22;--panel-2:#10151c;--border:#262e3d;",
-	"--text:#e6edf3;--muted:#8d96a5;--pre:#aab4c3;--accent:#3d7dff;",
-	"--user:#1e3a5f;--ok:#3fb950;--warn:#d29922;--err:#f85149",
+	"--bg:#000;--panel:#0b0b0b;--panel-2:#070707;--border:#262626;",
+	"--text:#e8e4dc;--muted:#7a756c;--pre:#b5afa3;--accent:#e2571f;",
+	"--user:#231307;--ok:#cfc9bd;--warn:#e2571f;--err:#f0473c;",
+	"--mono:'" + BODY_FONT_FAMILY + "',ui-monospace,SFMono-Regular,Menlo,monospace;",
+	"--doto:'" + FONT_FAMILY + "',ui-monospace,SFMono-Regular,Menlo,monospace",
 	"}",
 	"*{box-sizing:border-box}",
 	"html,body{height:100%}",
 	"body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
 	"h1{font-size:15px;margin:0;font-weight:600}",
-	"button{font:inherit;font-size:14px;border:0;border-radius:10px;padding:7px 13px;background:var(--accent);color:#fff;cursor:pointer}",
-	"button.ghost{background:var(--panel);color:var(--muted);border:1px solid var(--border);border-radius:9px;padding:5px 11px;font-size:13px}",
+	"button{font:inherit;font-size:14px;border:0;border-radius:0;padding:7px 13px;background:var(--accent);color:#000;cursor:pointer}",
+	"button.ghost{background:transparent;color:var(--muted);border:0;padding:5px 11px;font:13px var(--doto)}",
 	"button:disabled{opacity:.4;cursor:default}",
 	".dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}",
 	".dot.on{background:var(--ok)}",
@@ -67,7 +83,7 @@ export function renderPairingWaitPage(id: string): string {
 	const style = [
 		PAGE_BASE_STYLE,
 		"main{max-width:420px;margin:22vh auto 0;padding:0 22px;text-align:center}",
-		".card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:22px 18px}",
+		".card{background:var(--panel);border:1px solid var(--border);border-radius:0;padding:22px 18px}",
 		".state{display:flex;align-items:center;gap:9px;justify-content:center;font-size:16px;font-weight:600}",
 		".sub{color:var(--muted);font-size:13.5px;margin:10px 0 0}",
 		"a{color:var(--muted);font-size:13px;display:inline-block;margin-top:18px}",
@@ -109,34 +125,44 @@ const CHAT_STYLE = [
 	PAGE_BASE_STYLE,
 	"#app{display:flex;flex-direction:column;height:100vh}",
 	"header{flex:none;display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 9px) 12px 9px;border-bottom:1px solid var(--border);background:var(--bg)}",
-	"header .title{font-weight:650;font-size:16px}",
+	"header .title{font:650 15px/1.2 var(--doto);letter-spacing:.08em}",
 	"header .grow{flex:1}",
-	".chip{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:3px 9px}",
+	".chip{display:flex;align-items:center;gap:6px;font:11px/1 var(--doto);letter-spacing:.05em;color:var(--muted);border:1px solid var(--border);border-radius:0;padding:4px 10px}",
 	"main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}",
-	"#log{position:relative;max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding:14px 12px 24px}",
-	".bubble{border-radius:16px;padding:9px 13px;overflow-wrap:break-word;max-width:88%}",
-	".user{align-self:flex-end;background:var(--user);border-bottom-right-radius:5px}",
-	".assistant{align-self:flex-start;background:var(--panel);border:1px solid var(--border);border-bottom-left-radius:5px;white-space:pre-wrap}",
-	".step{align-self:stretch;background:var(--panel-2);border:1px solid var(--border);border-left:3px solid var(--muted);border-radius:10px;font-size:13px}",
+	"#log{position:relative;counter-reset:step;max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding:14px 12px 24px}",
+	".bubble{border-radius:0;padding:9px 13px;overflow-wrap:break-word;max-width:88%}",
+	".user{align-self:flex-end;background:var(--user);border:1px solid #3a2413;font:13.5px/1.65 var(--mono)}",
+	".assistant{align-self:flex-start;background:var(--panel);border:1px solid var(--border);white-space:pre-wrap;font:13.5px/1.65 var(--mono)}",
+	".step{align-self:stretch;counter-increment:step;background:var(--panel-2);border:1px solid var(--border);border-left:3px solid var(--muted);border-radius:0;font:12px/1.5 var(--doto)}",
 	".step.done{border-left-color:var(--ok)}",
-	".step.think{border-left-color:#6e40c9}",
+	".step.think{border-left-color:#8b7ab8}",
 	".step.running{border-left-color:var(--warn)}",
 	".step.error{border-left-color:var(--err)}",
 	".step>summary{list-style:none;cursor:pointer;padding:7px 11px;color:var(--muted);display:flex;align-items:center;gap:8px;-webkit-user-select:none;user-select:none}",
 	".step>summary::-webkit-details-marker{display:none}",
-	".step>summary::before{content:'▸';font-size:11px;transition:transform .15s}",
-	".step[open]>summary::before{transform:rotate(90deg)}",
-	".step pre{margin:0;padding:7px 11px;border-top:1px solid var(--border);white-space:pre-wrap;overflow:auto;max-height:280px;color:var(--pre);font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}",
-	".info{align-self:center;color:var(--muted);font-size:12px}",
-	".empty{align-self:center;color:var(--muted);text-align:center;margin-top:18vh;font-size:14px;line-height:1.8;max-width:300px}",
+	// the step number is a CSS counter, not JS: numbering survives in-place
+	// patches, resets and rebinds without touching the reconciler.
+	".step>summary::before{content:'▸ ' counter(step,decimal-leading-zero) ' '}",
+	".step[open]>summary::before{content:'▾ ' counter(step,decimal-leading-zero) ' '}",
+	".step pre{margin:0;padding:7px 11px;border-top:1px solid var(--border);background:#050505;white-space:pre-wrap;overflow:auto;max-height:280px;color:var(--pre);font:12px/1.5 var(--mono)}",
+	".info{align-self:center;color:var(--muted);font:10.5px/1.7 var(--doto);letter-spacing:.07em;text-align:center}",
+	".empty{align-self:center;color:var(--muted);text-align:center;margin-top:16vh;font:11px/1.9 var(--doto);letter-spacing:.09em;max-width:320px}",
+	".empty::before{content:'▓▒░  pi-lan-mobile v0.1  ░▒▓\\A· awaiting first prompt ·';white-space:pre;display:block;color:var(--pre);margin-bottom:6px}",
+	// the dot-matrix strip: the pins' dither texture, kept OFF the reading area.
+	".empty::after{content:'';display:block;width:230px;height:64px;margin:16px auto 0;opacity:.5;background:radial-gradient(var(--border) 1px,transparent 1.2px);background-size:8px 8px}",
 	"form{flex:none;display:flex;align-items:flex-end;gap:8px;padding:9px 12px calc(env(safe-area-inset-bottom) + 9px);border-top:1px solid var(--border);background:var(--bg)}",
 	// Safari zooms the page on focus when a field's font is under 16px.
-	"textarea{flex:1;font:inherit;font-size:16px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:20px;padding:8px 14px;resize:none;max-height:140px;outline:none}",
+	"textarea{flex:1;font-size:16px;font-family:var(--mono);background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:0;padding:8px 14px;resize:none;max-height:140px;outline:none}",
 	"textarea:focus{border-color:var(--accent)}",
-	"#send{flex:none;width:38px;height:38px;border-radius:50%;font-size:17px;padding:0;display:flex;align-items:center;justify-content:center}",
+	"#send{flex:none;width:38px;height:38px;border-radius:0;padding:0;position:relative;background:var(--bg);font:0/0 var(--doto)}",
+	".glyf{position:absolute;left:50%;top:50%;margin:-18px 0 0 -18px;width:36px;text-align:left;white-space:pre;font:5.46px/3.27px var(--doto)}",
+	".glyf.field{color:var(--accent);opacity:.45}",
+	".glyf.mark{color:var(--text)}",
+	"#send:disabled{opacity:1}",
+	"#send:disabled .glyf.mark{color:var(--muted)}",
 	// jump-to-latest lives INSIDE the scroller as a sticky element: 'bottom:0'
 	// pins it to the visible band no matter how the keyboard reshapes the page.
-	"#jump{position:sticky;bottom:2px;align-self:center;z-index:2;width:34px;height:34px;border-radius:50%;font-size:16px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--panel);border:1px solid var(--border);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.45)}",
+	"#jump{position:sticky;bottom:2px;align-self:center;z-index:2;width:34px;height:34px;border-radius:0;font:16px var(--doto);padding:0;display:flex;align-items:center;justify-content:center;background:var(--panel);border:1px solid var(--border);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.45)}",
 	"#jump[hidden]{display:none}",
 ].join("\n");
 
@@ -144,15 +170,15 @@ const CHAT_BODY = [
 	'<div id="app">',
 	'<header><span class="title">pi</span><span class="grow"></span>',
 	'<span class="chip"><span class="dot off" id="dot"></span><span id="net">offline</span></span>',
-	'<button class="ghost" id="newBtn" title="new session">new</button>',
-	'<button class="ghost" id="stopBtn" disabled title="interrupt the agent">stop</button></header>',
+	'<button class="ghost" id="newBtn" title="new session">[new]</button>',
+	'<button class="ghost" id="stopBtn" disabled title="interrupt the agent">[stop]</button></header>',
 	'<main id="scroller"><div id="log">',
 	'<div class="empty" id="empty">Nothing here yet.<br>Message pi from the phone, or type on the desktop.</div>',
 	'<button id="jump" type="button" hidden aria-label="jump to latest">↓</button>',
 	"</div></main>",
 	'<form id="composer">',
 	'<textarea id="input" rows="1" placeholder="Message pi…" enterkeyhint="send" autocomplete="off"></textarea>',
-	'<button id="send" disabled aria-label="Send">↑</button>',
+	'<button id="send" disabled aria-label="Send"><span class="glyf field">•••••••••••\n•••••••••••\n•••••••••••\n•••••••••••\n•••••••••••\n•••••••••••\n•••••••••••\n•••••••••••\n•••••••••••\n•••••••••••\n•••••••••••</span><span class="glyf mark">           \n           \n     •     \n    •••    \n   • • •   \n  •  •  •  \n     •     \n     •     \n     •     \n           \n           </span></button>',
 	"</form>",
 	"</div>",
 ].join("\n");
@@ -270,6 +296,10 @@ const CHAT_SCRIPT = [
 	"    // patch the EXISTING summary/pre nodes: reading position survives",
 	"    // arriving tokens (an empty pre for a not-yet-streamed field is a no-op).",
 	"    refresh(slot.node.e, item);",
+	"    // the status CLASS must follow the stream too: it used to ride only",
+	"    // build(), so a tool built while running kept its 'running' border",
+	"    // forever after finishing — the glyph moved to ✓ and the border lied.",
+	"    slot.node.e.className = item.kind === 'thinking' ? 'step think' : 'step ' + (item.status === 'running' ? 'running' : item.status === 'error' ? 'error' : 'done');",
 	"    var body = item.text !== undefined ? item.text : item.output;",
 	"    // first-write-wins mirrors the old build(): input is set once at tool",
 	"    // start; a pre that never existed for a field is not conjured mid-turn.",

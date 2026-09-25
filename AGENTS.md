@@ -49,9 +49,12 @@ routes removed by design: the operator at the pi TUI is the approval surface.
 - `npm test` — run all suites (needs `npm install` for the entry suite; pure
   contract suites can run with `node --test test/bridge.test.ts test/stream.test.ts
   test/pages.test.ts` on a bare checkout).
-- `npm run preview` — dev-only static server for the phone pages on the LAN
-  (`scripts/preview-page.ts`); iterate on keyboard/viewport behavior without
-  pairing or pi restarts. Serve HTML only — kill it when done, it has no auth.
+- `npm run preview` — dev-only preview server for the phone pages on the LAN
+  (`scripts/preview-page.ts`); iterate on keyboard/viewport behavior and
+  transcript styling without pairing or pi restarts. Serves the pages plus a
+  **scripted fake `/api/rpc`** (cursor-mirrored demo transcript — no pi
+  access, no secrets, nothing real is ever dispatched). HTML + canned JSON
+  only — kill it when done, it has no auth.
 - Manual check: load pi in this dir (`pi -e extensions/pi-lan-mobile.ts` or via
   `pi install`), run `/mobile`, scan/visit the printed URL from a LAN device.
 

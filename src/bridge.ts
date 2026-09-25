@@ -176,7 +176,7 @@ export class Bridge {
 		response.setHeader("referrer-policy", "no-referrer");
 		response.setHeader(
 			"content-security-policy",
-			"default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
+			"default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; font-src data:; connect-src 'self'",
 		);
 
 		// SR-1: private-network-only clients.
