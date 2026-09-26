@@ -176,10 +176,10 @@ const CHAT_STYLE = [
 	".bubble a,.bubble a:visited{color:var(--accent);text-decoration:underline}",
 	"#send{flex:none;width:38px;height:38px;border-radius:0;padding:0;position:relative;background:var(--bg);font:0/0 var(--doto)}",
 	".glyf{position:absolute;left:50%;top:50%;margin:-18px 0 0 -18px;width:36px;text-align:left;white-space:pre;font:5.46px/3.27px var(--doto)}",
-	".glyf.field{color:var(--accent);opacity:.45}",
+	".glyf.field{color:var(--accent);opacity:.6}",
 	".glyf.mark{color:var(--text)}",
 	"#send:disabled{opacity:1}",
-	"#send:disabled .glyf.mark{color:var(--muted)}",
+	"#send:disabled .glyf.mark{color:var(--pre)}",
 	// jump-to-latest lives INSIDE the scroller as a sticky element: 'bottom:0'
 	// pins it to the visible band no matter how the keyboard reshapes the page.
 	"#jump{position:sticky;bottom:2px;align-self:center;z-index:2;width:34px;height:34px;border-radius:0;font:16px var(--doto);padding:0;display:flex;align-items:center;justify-content:center;background:var(--panel);border:1px solid var(--border);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.45)}",
