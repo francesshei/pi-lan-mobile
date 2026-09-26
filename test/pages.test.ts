@@ -106,7 +106,11 @@ function makeEl(tag: string) {
 		scrollHeight: 1000,
 		clientHeight: 200,
 		scrollWidth: 100,
-		addEventListener() {},
+		scrollLeft: 0,
+		listeners: [] as string[],
+		addEventListener(type: string) {
+			el.listeners.push(type);
+		},
 		appendChild(child: any) {
 			el.children.push(child);
 			child.parentNode = el;
@@ -139,11 +143,26 @@ function makeEl(tag: string) {
 		closest() {
 			return null;
 		},
+		attrs: {} as Record<string, string>,
+		// the page script stashes scroll position on classList during same-kind
+		// text patches; the fake needs the slot to exist.
+		classList: {} as Record<string, any>,
+		setAttribute(k: string, v: string) {
+			el.attrs[k] = v;
+		},
 		blur() {},
 	};
 	let text = "";
+	// Real textContent AGGREGATES descendant text; the getter must, or table/th
+	// cells (filled via text leaves) read empty and lie about what rendered.
+	const textOf = (n: any): string =>
+		n.children && n.children.length
+			? n.children.map(textOf).join("")
+			: n.tagName === "#text"
+				? n.text
+				: n.textContent;
 	Object.defineProperty(el, "textContent", {
-		get: () => text,
+		get: () => (el.children.length ? el.children.map(textOf).join("") : text),
 		// Real DOM: assigning textContent replaces ALL children with one text
 		// node. reset() leans on this (log.textContent = ""), so mirror it.
 		set: (v: string) => {
@@ -167,6 +186,8 @@ async function runPage() {
 	const doc = {
 		getElementById: (id: string) => els.get(id) ?? null,
 		createElement: (tag: string) => makeEl(tag),
+		// md()/inl() text leaves arrive as text nodes, never as html strings.
+		createTextNode: (t: string) => ({ tagName: "#text", text: String(t), children: [], parentNode: null }),
 		activeElement: null,
 	};
 	const env = {
@@ -228,4 +249,111 @@ test("offline has one owner: render crashes cannot pose as network loss", () => 
 	assert.match(script, /String\(item\.kind\)\);\n\}\nfunction nodes\(item\) \{/, "nodes is top-level after build");
 	assert.match(script, /\nfunction refresh\(e, item\) \{/, "refresh is top-level");
 	assert.match(script, /var glyph = item\.status/, "the status glyph is defined where it is used");
+});
+
+test("assistant text renders markdown as nodes; hrefs are scheme-gated", async () => {
+	const { api, els } = await runPage();
+	api.apply({
+		key: "a1:text",
+		kind: "text",
+		text:
+			"# Title\nsome **bold** *em* `code` and [ok](https://example.com) plus [bad](javascript:alert(1))\n\n```js\nvar fence = 1;\n```\n\n> quoted line\n\n- first\n- second\n\n1. one\n\n| step | ms |\n|---|:-:|\n| parse | 12 |\n| **render** | 4 |",
+	});
+	const flat: any[] = [];
+	const walk = (n: any) => {
+		for (const c of n.children) {
+			flat.push(c);
+			walk(c);
+		}
+	};
+	walk(els.get("log"));
+	// fake DOM tagName is uppercased (like the real one)
+	const byTag = (t: string) => flat.filter((n) => n.tagName === t.toUpperCase());
+	// Inline formatting is built from createElement + text leaves only.
+	assert.equal(byTag("strong")[0].textContent, "bold", "bold leaf");
+	assert.equal(byTag("em")[0].textContent, "em", "em leaf");
+	assert.equal(byTag("code")[0].textContent, "code", "inline code");
+	// Links: only http(s)/mailto become anchors; javascript: stays plain text.
+	const as = byTag("a");
+	assert.equal(as.length, 1, "javascript: never becomes a link");
+	assert.equal(as[0].attrs.href, "https://example.com");
+	assert.equal(as[0].attrs.rel, "noopener noreferrer");
+	assert.ok(!flat.some((n) => /javascript:/i.test(n.attrs?.href ?? "")), "no javascript: href anywhere");
+	const txt = flat.filter((n) => n.tagName === "#text").map((n: any) => n.text).join("");
+	assert.match(txt, /bad \(javascript:alert\(1\)\)/, "denied link shows its target");
+	// Blocks: fence, heading, quote, lists.
+	assert.match(byTag("pre")[0].textContent, /var fence = 1;/, "fenced block");
+	assert.ok(flat.some((n) => n.className === "mdh mdh1"), "heading block");
+	assert.ok(flat.some((n) => n.className === "mdq"), "quote block");
+	assert.equal(byTag("ul").length, 1, "bullet list");
+	assert.equal(byTag("ol").length, 1, "ordered list");
+	assert.equal(byTag("li").length, 3, "two bullets + one ordered item");
+	// Table: header row + |---| delimiter + body rows, cells inline-parsed,
+	// wrapped in a horizontal scroller.
+	assert.equal(byTag("table").length, 1, "one table");
+	assert.equal(byTag("th").length, 2, "two header cells");
+	assert.equal(byTag("th")[1].textContent, "ms", "header leaf");
+	assert.equal(byTag("td").length, 4, "two body rows of two cells");
+	assert.equal(byTag("tr").length, 3, "header row + two body rows");
+	const cellStrong = byTag("strong").filter((n: any) => n.parentNode && n.parentNode.tagName === "TD");
+	assert.equal(cellStrong.length, 1, "cells run through the inline parser");
+	assert.ok(flat.some((n) => n.className === "mdtsv"), "table wrapped in a horizontal scroller");
+	const tw = flat.find((n) => n.className === "mdtsv");
+	assert.ok(tw.listeners.indexOf("scroll") >= 0, "scroller remembers drag position");
+});
+
+test("streaming text patches churn children, never the bubble node", async () => {
+	// The details boxes must not be the only scroll-safe surface: a text bubble
+	// owns no inner scroller, so same-kind patches may rebuild its CHILDREN —
+	// but the bubble element itself must keep its identity in the log.
+	const { api, els } = await runPage();
+	api.apply({ key: "a1:text", kind: "text", text: "half **bo" });
+	const bubble = els.get("log").children.find((c: any) => /bubble/.test(c.className));
+	api.apply({ key: "a1:text", kind: "text", text: "half **bold**" });
+	const again = els.get("log").children.find((c: any) => /bubble/.test(c.className));
+	assert.equal(again, bubble, "bubble node identity survives the patch");
+	const strongs: any[] = [];
+	const walk = (n: any) => { for (const c of n.children) { if (c.tagName === "STRONG") strongs.push(c); walk(c); } };
+	walk(bubble);
+	assert.equal(strongs.length, 1, "children rebuild without accumulating duplicates");
+});
+
+test("a table arriving mid-stream upgrades the bubble, never duplicates blocks", async () => {
+	// A table's header line appears BEFORE its |---| delimiter exists, so the
+	// streaming bubble briefly shows it as a paragraph; every later token
+	// rebuilds the children and the row upgrades to a real table. This test
+	// pins that path: after the full text lands, a chunk-streamed render must
+	// equal a single full render — one table, same block count.
+	const full = "# Title\nsome **bold** text\n\n| a | b |\n|---|---|\n| 1 | 2 |";
+	const { api, els } = await runPage();
+	let txt = "";
+	for (let c = 17; c < full.length; c += 29) {
+		txt = full.slice(0, c);
+		api.apply({ key: "a1:text", kind: "text", text: txt });
+	}
+	api.apply({ key: "a1:text", kind: "text", text: full });
+	const ref = await runPage();
+	ref.api.apply({ key: "a1:text", kind: "text", text: full });
+	const bubbleOf = (e: any) =>
+		e.get("log").children.find((c: any) => /bubble/.test(c.className));
+	const b1 = bubbleOf(els);
+	assert.ok(b1, "bubble exists");
+	const count = (n: any, tag: string) => {
+		let k = 0;
+		const w = (x: any) => { for (const c of x.children) { if (c.tagName === tag) k++; w(c); } };
+		w(n);
+		return k;
+	};
+	assert.equal(count(b1, "TABLE"), 1, "header ended up a table, not a stray paragraph");
+	assert.equal(b1.children.length, bubbleOf(ref.els).children.length, "chunk stream yields the same blocks as a full render");
+});
+
+test("markdown renderer respects the page contracts it lives under", () => {
+	const { script } = parts(renderMobilePage());
+	assert.match(script, /String\.fromCharCode\(96\)/, "the backtick enters only as a charcode");
+	assert.match(script, /function safeHref/, "link schemes pass a gate");
+	assert.ok(!/\.href\s*=/.test(script), "href is set via setAttribute, never property-cast");
+	assert.ok(!/insertAdjacentHTML|outerHTML/.test(script), "no html-string sink besides none");
+	const renders = script.match(/md\(item\.text \|\| ''\)\.forEach/g) ?? [];
+	assert.equal(renders.length, 2, "build and the same-kind text patch share the renderer");
 });
